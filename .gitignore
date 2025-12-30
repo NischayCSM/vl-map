@@ -1,0 +1,5 @@
+# Ignore everything inside video_data...
+video_data/*
+
+# ...EXCEPT the .gitkeep file (so the folder stays)
+!video_data/.gitkeep
