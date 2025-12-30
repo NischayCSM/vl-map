@@ -85,7 +85,16 @@ The system will process visuals (CLIP) and audio (Whisper). This takes a few min
 
 ##Project Structure
 
-vl-map/ ├── app.py # Main Streamlit Application (The "Intelligent System") ├── requirements.txt # Python Dependencies ├── video_data/ # Generated Assets (Gitignored) │ ├── current_video.mp4 │ ├── video_vectors.pt # The Video Matrix (Tensor File) │ └── transcript.txt # Speech-to-Text Output └── README.md # Documentation
+```
+vl-map/
+├── app.py # Main Streamlit Application (The "Intelligent System")
+├── requirements.txt # Python Dependencies
+├── video_data/ # Generated Assets (Gitignored)
+│ ├── current_video.mp4
+│ ├── video_vectors.pt # The Video Matrix (Tensor File)
+│ └── transcript.txt # Speech-to-Text Output
+└── README.md # Documentation
+```
 
 ##Contributing
 
