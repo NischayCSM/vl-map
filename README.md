@@ -44,14 +44,14 @@ The system operates in two distinct phases:
 * **FFmpeg** (Required for audio extraction)
 * **GPU** (Recommended: CUDA for fast inference)
 
-### 1. Clone the Repository
+### Clone the Repository
 
 ```bash
 git clone [https://github.com/your-username/vl-map.git](https://github.com/your-username/vl-map.git)
 cd vl-map
 ```
 
-### 2. Install Dependencies
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
