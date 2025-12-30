@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-red) ![CLIP](https://img.shields.io/badge/Model-CLIP%20ViT--B%2F16-green) 
 
-## 📌 Overview
+## Overview
 
 **VL-MaP** (Vision-Language Matrix Penalty) is an intelligent video analysis tool designed to perform precise, semantic retrieval on educational and technical video content.
 
@@ -12,31 +12,31 @@ Standard vector search tools often struggle with "visual synonyms" in lecture vi
 
 The system features a **Smart Router** that distinguishes between visual queries ("Find code") and conceptual queries ("Explain recursion"), automatically routing the latter to a Retrieval-Augmented Generation (RAG) engine powered by **Llama 3**.
 
-## ✨ Key Features
+## Key Features
 
-* **👁️ Matrix-Penalty Visual Search:**
+* **Matrix-Penalty Visual Search:**
     * Uses **CLIP (ViT-B/16 Patch16)** for high-resolution visual embedding.
     * Implements a custom linear algebra search engine using direct tensor operations (eliminating the need for a vector database).
     * Applies a dynamic penalty score equation:  
       $$Score = Max(Positive) - (Penalty \times Max(Negative))$$
-* **🧠 Intelligent RAG Explainer:**
+* **Intelligent RAG Explainer:**
     * Uses **Faster-Whisper** for high-accuracy speech-to-text transcription.
     * Integrates **Llama 3** (via Ollama) to answer conceptual questions based on the transcript context.
-* **🚦 Smart Intent Router:**
+* **Smart Intent Router:**
     * Automatically detects if a user wants to *see* something (Visual Mode) or *learn* something (Explain Mode) and switches processing paths instantly.
-* **🚀 Efficient Architecture:**
+* **Efficient Architecture:**
     * **Phase 1 (Ingestion):** Pre-computes video matrices and transcripts once per video.
     * **Phase 2 (Inference):** Runs searches in milliseconds using cached tensors loaded in VRAM.
     * **Stack-Based UI:** Results appear chronologically (newest on top) for a seamless search engine experience.
 
-## 🏗️ Architecture
+## Architecture
 
 The system operates in two distinct phases:
 
 1.  **Ingestion:** Converts raw video frames and audio into a **Video Matrix** (`.pt` file) and a **Transcript** (`.txt` file).
 2.  **Inference:** Performs dot-product similarity search with penalty logic for visuals, or LLM-based RAG for concepts.
 
-## 🛠️ Installation
+## Installation
 
 ### Prerequisites
 * **Python 3.10+**
@@ -62,7 +62,7 @@ Download and run Ollama, then pull the Llama 3 model:
 ```bash
 ollama pull llama3
 ```
-# 🚀 Usage
+# Usage
 
 ### Run the Application
 
