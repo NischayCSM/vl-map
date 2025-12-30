@@ -2,7 +2,7 @@
 
 **An Intelligent Multimodal Video Analysis System**
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-red) ![CLIP](https://img.shields.io/badge/Model-CLIP%20ViT--B%2F16-green) !
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-red) ![CLIP](https://img.shields.io/badge/Model-CLIP%20ViT--B%2F16-green) 
 
 ## 📌 Overview
 
