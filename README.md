@@ -56,34 +56,34 @@ cd vl-map
 ```bash
 pip install -r requirements.txt
 ```
-###Setup Ollama
+### Setup Ollama
 
 Download and run Ollama, then pull the Llama 3 model:
 ```bash
 ollama pull llama3
 ```
-#🚀 Usage
+# 🚀 Usage
 
-###Run the Application
+### Run the Application
 
 ```bash
 streamlit run app.py
 ```
-###Analyze a Video
+### Analyze a Video
 
-*Open the web interface (default: http://localhost:8501).
-*Upload an MP4 video file using the sidebar.
-*Click "🚀 Analyze".
-The system will process visuals (CLIP) and audio (Whisper). This takes a few minutes depending on video length and GPU power.
+* Open the web interface (default: http://localhost:8501).
+* Upload an MP4 video file using the sidebar.
+* Click "🚀 Analyze".
+  The system will process visuals (CLIP) and audio (Whisper). This takes a few minutes depending on video length and GPU power.
 
-###Search & Chat
+### Search & Chat
 
-*Visual Search: Type queries like "Find python code", "Show me the flow chart".
-    *The system will return a list of clickable timestamps leading to the exact frame.
-*Conceptual Explanation: Type queries like "Explain the algorithm", "Summarize the intro".
-    *The system will read the transcript and provide a professor-style explanation.
+* Visual Search: Type queries like "Find python code", "Show me the flow chart".
+    * The system will return a list of clickable timestamps leading to the exact frame.
+* Conceptual Explanation: Type queries like "Explain the algorithm", "Summarize the intro".
+    * The system will read the transcript and provide a professor-style explanation.
 
-##Project Structure
+## Project Structure
 
 ```
 vl-map/
@@ -96,6 +96,6 @@ vl-map/
 └── README.md # Documentation
 ```
 
-##Contributing
+## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request for improvements to the penalty logic, UI, or model integration.
