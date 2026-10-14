@@ -8,7 +8,7 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
-from logic import route_query, get_search_config, parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp
+from logic import route_query, get_search_config, dedupe_scenes,parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -99,8 +99,22 @@ def reset_system():
     st.session_state.pop('last_sources', None)
     st.session_state.messages = []
     st.session_state.video_time = 0
+    st.session_state.ingest_errors = []
     load_index.clear()
     free_gpu_memory()
+
+def report_ingest_error(msg):
+    # Shown now and kept in session state so it survives the st.rerun() after analysis.
+    st.error(msg)
+    st.session_state.setdefault("ingest_errors", []).append(msg)
+
+def ollama_error_message(e):
+    text = str(e)
+    if getattr(e, "status_code", None) == 404 or "not found" in text.lower():
+        return "The llama3 model isn't available in Ollama. Run `ollama pull llama3`, then try again."
+    if isinstance(e, ConnectionError) or "connect" in type(e).__name__.lower() or "connect" in text.lower():
+        return "Can't reach the Ollama server. Start it with `ollama serve` (and run `ollama pull llama3` once), then try again."
+    return f"LLM Error: {e}"
 
 # --- 1. INGESTION ---
 def process_video_ingestion(video_path):
@@ -113,17 +127,21 @@ def process_video_ingestion(video_path):
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
-    
+    if not fps or fps <= 0:
+        cap.release(); progress_bar.empty(); status_text.empty()
+        report_ingest_error("Could not read this video (no frame rate found). Is it a valid MP4?")
+        return False
+
     frame_data = {"timestamps": [], "embeddings": []}
     frame_count = 0
-    sample_rate = int(fps * 2) 
-    
+    sample_rate = max(int(fps * 2), 1)
+
     while cap.isOpened():
         ret, frame = cap.read()
         if not ret: break
         if frame_count % sample_rate == 0:
             timestamp = frame_count / fps
-            progress_bar.progress(min(frame_count / total_frames, 1.0))
+            progress_bar.progress(min(frame_count / max(total_frames, 1), 1.0))
             if np.mean(frame) < 30: 
                 frame_count += 1; continue
             
@@ -141,12 +159,16 @@ def process_video_ingestion(video_path):
         frame_count += 1
     cap.release()
     
-    if len(frame_data["embeddings"]) > 0:
-        tensor_stack = torch.stack(frame_data["embeddings"])
-        torch.save({"timestamps": frame_data["timestamps"], "matrix": tensor_stack}, VECTORS_PATH)
-    
     free_gpu_memory()
-    progress_bar.empty(); status_text.text(f"✅ Visuals Ready.")
+    progress_bar.empty()
+    if not frame_data["embeddings"]:
+        status_text.empty()
+        report_ingest_error("No frames could be indexed: the video is empty or every sampled frame is too dark. Visual search is unavailable for this video.")
+        return False
+
+    tensor_stack = torch.stack(frame_data["embeddings"])
+    torch.save({"timestamps": frame_data["timestamps"], "matrix": tensor_stack}, VECTORS_PATH)
+    status_text.text(f"✅ Visuals Ready.")
     return True
 
 def process_audio_transcription(video_path, model_size):
@@ -163,7 +185,10 @@ def process_audio_transcription(video_path, model_size):
         del model; free_gpu_memory()
         status_text.text("✅ Audio Done!"); progress_bar.empty()
         return True
-    except: return False
+    except Exception as e:
+        progress_bar.empty(); status_text.empty(); free_gpu_memory()
+        report_ingest_error(f"Transcription failed ({type(e).__name__}: {e}). Visual search still works, but explanations have no transcript to draw on.")
+        return False
 
 @st.cache_resource
 def load_clip():
@@ -175,7 +200,7 @@ def load_clip():
 @st.cache_resource(max_entries=1)
 def load_index(vectors_mtime):
     # Keyed on the file's mtime so a newly analyzed video is never served from a stale cache.
-    data = torch.load(VECTORS_PATH)
+    data = torch.load(VECTORS_PATH, weights_only=True)
     return data["matrix"].to(DEVICE), data["timestamps"]
 
 @st.cache_data(max_entries=1)
@@ -187,7 +212,7 @@ def render_jump_buttons(caption, times, key_prefix):
     st.caption(caption)
     cols = st.columns(4)
     for idx, ts in enumerate(times):
-        if cols[idx % 4].button(f"▶ {format_timestamp(ts)}", key=f"btn_{key_prefix}_{idx}"):
+        if cols[idx % 4].button(f"▶ {format_timestamp(ts)}", key=f"btn_{key_prefix}_{idx}_{ts:.2f}"):
             st.session_state.video_time = int(ts)
             st.rerun()
 
@@ -229,8 +254,12 @@ if "video_time" not in st.session_state: st.session_state.video_time = 0
 # Header
 st.title("👁️ Vision-Language Video Analyst")
 
+for err in st.session_state.get("ingest_errors", []):
+    st.error(err)
+
 if not os.path.exists(UPLOAD_PATH) or not os.path.exists(VECTORS_PATH):
-    st.info("👈 Upload a video in the sidebar to get started!")
+    if not st.session_state.get("ingest_errors"):
+        st.info("👈 Upload a video in the sidebar to get started!")
 else:
     search_model, search_proc = load_clip()
     matrix, timestamps = load_index(os.path.getmtime(VECTORS_PATH))
@@ -305,17 +334,14 @@ else:
                         best_neg, _ = torch.max(neg_scores, dim=1)
                         final_scores = best_pos - (config["penalty"] * best_neg)
                     
-                    values, indices = torch.topk(final_scores, top_k_slider) 
+                    k = min(top_k_slider, matrix.shape[0])
+                    values, indices = torch.topk(final_scores, k)
                     candidates = []
                     for score, idx in zip(values, indices):
                         candidates.append((timestamps[idx.item()], score.item()))
-                    
-                    candidates.sort(key=lambda x: x[0])
-                    if candidates:
-                        unique_matches.append(candidates[0])
-                        for m in candidates[1:]:
-                            if m[0] - unique_matches[-1][0] > 10: unique_matches.append(m)
-                    
+
+                    unique_matches = dedupe_scenes(candidates, min_gap=10)
+
                     visual_context = f"Matches at: {', '.join([str(int(m[0])) for m in unique_matches])}s"
                 else:
                     visual_context = "Concept Search."
@@ -357,11 +383,11 @@ else:
                     
                     res = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
                     st.session_state.messages.append({"role": "assistant", "content": res['message']['content']})
-                except Exception as e: st.error(f"LLM Error: {e}")
+                except Exception as e: st.error(ollama_error_message(e))
             
         # 3. Found Scenes Grid (Below Input)
         if st.session_state.get("last_matches"):
-            render_jump_buttons(f"Found {len(st.session_state.last_matches)} scenes (Most Recent):",
+            render_jump_buttons(f"Found {len(st.session_state.last_matches)} scenes (in chronological order):",
                                 [ts for ts, _ in st.session_state.last_matches], "scene")
         if st.session_state.get("last_sources"):
             render_jump_buttons(f"Transcript sources ({len(st.session_state.last_sources)}):",

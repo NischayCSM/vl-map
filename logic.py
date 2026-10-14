@@ -125,6 +125,15 @@ def get_search_config(query):
     cfg = SEARCH_CONFIGS[topic]
     return {"pos": list(cfg["pos"]), "neg": list(cfg["neg"]), "penalty": cfg["penalty"]}
 
+
+def dedupe_scenes(candidates, min_gap=10):
+    """Sort (timestamp, score) matches by time and drop any within min_gap seconds of the last kept one."""
+    unique = []
+    for m in sorted(candidates, key=lambda x: x[0]):
+        if not unique or m[0] - unique[-1][0] > min_gap:
+            unique.append(m)
+    return unique
+
 # --- 📜 TRANSCRIPT RETRIEVAL ---
 # Retrieval uses BM25 keyword scoring in pure Python rather than CLIP's text
 # encoder: CLIP truncates at 77 tokens (~1/3 of an 800-char chunk) and was
