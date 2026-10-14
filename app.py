@@ -8,7 +8,7 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
-from logic import route_query
+from logic import route_query, parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -96,6 +96,7 @@ def reset_system():
     if os.path.exists(TRANSCRIPT_PATH): os.remove(TRANSCRIPT_PATH)
     st.session_state.video_processed = False
     st.session_state.pop('last_matches', None)
+    st.session_state.pop('last_sources', None)
     st.session_state.messages = []
     st.session_state.video_time = 0
     load_index.clear()
@@ -194,6 +195,19 @@ def load_index(vectors_mtime):
     data = torch.load(VECTORS_PATH)
     return data["matrix"].to(DEVICE), data["timestamps"]
 
+@st.cache_data(max_entries=1)
+def load_transcript_chunks(transcript_mtime):
+    with open(TRANSCRIPT_PATH, "r", encoding="utf-8") as f:
+        return chunk_segments(parse_transcript(f.read()))
+
+def render_jump_buttons(caption, times, key_prefix):
+    st.caption(caption)
+    cols = st.columns(4)
+    for idx, ts in enumerate(times):
+        if cols[idx % 4].button(f"▶ {format_timestamp(ts)}", key=f"btn_{key_prefix}_{idx}"):
+            st.session_state.video_time = int(ts)
+            st.rerun()
+
 # --- UI SIDEBAR ---
 with st.sidebar:
     st.header("⚙️ Configuration")
@@ -221,6 +235,7 @@ with st.sidebar:
     if st.button("🧹 Clear Chat"):
         st.session_state.messages = []
         st.session_state.pop('last_matches', None)
+        st.session_state.pop('last_sources', None)
         st.rerun()
 
 # --- MAIN APP ---
@@ -236,9 +251,9 @@ if not os.path.exists(UPLOAD_PATH) or not os.path.exists(VECTORS_PATH):
 else:
     search_model, search_proc = load_clip()
     matrix, timestamps = load_index(os.path.getmtime(VECTORS_PATH))
-    full_transcript = ""
+    transcript_chunks = []
     if os.path.exists(TRANSCRIPT_PATH):
-        with open(TRANSCRIPT_PATH, "r", encoding="utf-8") as f: full_transcript = f.read()
+        transcript_chunks = load_transcript_chunks(os.path.getmtime(TRANSCRIPT_PATH))
 
     # --- LAYOUT: 2 Columns ---
     col1, col2 = st.columns([1.6, 1])
@@ -323,23 +338,31 @@ else:
                     visual_context = "Concept Search."
                 
                 st.session_state.last_matches = unique_matches
-                
+
+                # --- TRANSCRIPT RETRIEVAL ---
+                sources = retrieve_chunks(query, transcript_chunks, top_n=5) if mode in ("EXPLAIN", "HYBRID") else []
+                st.session_state.last_sources = sources
+                transcript_context = format_chunks_for_prompt(sources) or "(No transcript available.)"
+                cite = "Cite the timestamps you rely on in the form [m:ss], e.g. [2:15]."
+
                 # --- EXPLAINER ---
                 try:
                     if mode == "EXPLAIN":
                         prompt = f"""
-                        You are a Professor. Use the transcript below to explain the concept.
+                        You are a Professor. Use the transcript excerpts below to explain the concept.
                         QUESTION: {query}
-                        TRANSCRIPT: {full_transcript[:15000]}
-                        INSTRUCTION: Be clear and concise.
+                        TRANSCRIPT EXCERPTS:
+                        {transcript_context}
+                        INSTRUCTION: Be clear and concise. {cite}
                         """
                     elif mode == "HYBRID":
                         prompt = f"""
                         You are a Video Assistant. Answer using both the visual matches and the transcript.
                         QUESTION: {query}
                         VISUALS: {visual_context}
-                        TRANSCRIPT: {full_transcript[:15000]}
-                        INSTRUCTION: Be clear and concise, and mention the relevant scenes.
+                        TRANSCRIPT EXCERPTS:
+                        {transcript_context}
+                        INSTRUCTION: Be clear and concise, and mention the relevant scenes. {cite}
                         """
                     else:
                         prompt = f"""
@@ -354,13 +377,13 @@ else:
                 except Exception as e: st.error(f"LLM Error: {e}")
             
         # 3. Found Scenes Grid (Below Input)
-        if "last_matches" in st.session_state and st.session_state.last_matches:
-            st.caption(f"Found {len(st.session_state.last_matches)} scenes (Most Recent):")
-            cols = st.columns(4)
-            for idx, (ts, score) in enumerate(st.session_state.last_matches):
-                if cols[idx % 4].button(f"▶ {int(ts//60)}:{int(ts%60):02d}", key=f"btn_{idx}"):
-                    st.session_state.video_time = int(ts)
-                    st.rerun()
+        if st.session_state.get("last_matches"):
+            render_jump_buttons(f"Found {len(st.session_state.last_matches)} scenes (Most Recent):",
+                                [ts for ts, _ in st.session_state.last_matches], "scene")
+        if st.session_state.get("last_sources"):
+            render_jump_buttons(f"Transcript sources ({len(st.session_state.last_sources)}):",
+                                [c["start"] for c in st.session_state.last_sources], "source")
+        if st.session_state.get("last_matches") or st.session_state.get("last_sources"):
             st.divider()
 
         # 4. Chat History (Stack: Newest First)
