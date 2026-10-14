@@ -8,7 +8,7 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
-from logic import route_query, parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp
+from logic import route_query, get_search_config, parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -101,23 +101,6 @@ def reset_system():
     st.session_state.video_time = 0
     load_index.clear()
     free_gpu_memory()
-
-# --- 🎯 SEARCH CONFIG ---
-def get_search_config(query):
-    q_lower = query.lower()
-    if "code" in q_lower or "python" in q_lower:
-        return {
-            "pos": ["software code with indentation", "IDLE python editor window", "programming syntax"],
-            "neg": ["presentation slide with bullet points", "powerpoint text slide", "big title text"],
-            "penalty": 0.4 
-        }
-    if "flow" in q_lower or "chart" in q_lower:
-        return {
-            "pos": ["diagram with boxes and arrows", "flowchart"],
-            "neg": ["face of a person", "text paragraph"],
-            "penalty": 0.2
-        }
-    return {"pos": [query], "neg": [], "penalty": 0.0}
 
 # --- 1. INGESTION ---
 def process_video_ingestion(video_path):

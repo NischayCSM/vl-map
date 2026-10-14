@@ -44,6 +44,87 @@ def route_query(query):
     return "HYBRID"
 
 
+
+# --- 🎯 SEARCH CONFIG ---
+# topic -> keywords (whole words/phrases), CLIP positive prompts, negative
+# prompts and penalty, for Score = Max(Positive) - penalty * Max(Negative).
+# The first topic whose keywords match wins, so more specific topics (e.g.
+# "bar chart" under graph) are listed before broader ones ("chart").
+SEARCH_CONFIGS = {
+    "code": {
+        "keywords": ["code", "coding", "python", "java", "javascript", "programming",
+                     "program", "script", "editor", "ide", "terminal", "syntax"],
+        "pos": ["software code with indentation", "IDLE python editor window", "programming syntax"],
+        "neg": ["presentation slide with bullet points", "powerpoint text slide", "big title text"],
+        "penalty": 0.4,
+    },
+    "graph": {
+        "keywords": ["graph", "graphs", "plot", "plots", "bar chart", "line chart", "pie chart",
+                     "histogram", "axis", "axes", "curve"],
+        "pos": ["a plotted graph with x and y axes", "a bar chart", "a line plot of data"],
+        "neg": ["paragraph of text", "face of a person"],
+        "penalty": 0.2,
+    },
+    "flowchart": {
+        "keywords": ["flow", "flowchart", "flowcharts", "flow chart", "chart", "diagram",
+                     "diagrams", "arrows", "uml"],
+        "pos": ["diagram with boxes and arrows", "flowchart"],
+        "neg": ["face of a person", "text paragraph"],
+        "penalty": 0.2,
+    },
+    "whiteboard": {
+        "keywords": ["whiteboard", "blackboard", "chalkboard", "board", "handwriting",
+                     "handwritten", "chalk", "marker"],
+        "pos": ["handwritten notes on a whiteboard", "chalk writing on a blackboard",
+                "a person writing on a board"],
+        "neg": ["typed presentation slide", "computer screen"],
+        "penalty": 0.3,
+    },
+    "table": {
+        "keywords": ["table", "tables", "spreadsheet", "rows", "columns", "grid"],
+        "pos": ["a table with rows and columns", "a spreadsheet grid of numbers"],
+        "neg": ["paragraph of text", "slide with bullet points"],
+        "penalty": 0.2,
+    },
+    "equation": {
+        "keywords": ["equation", "equations", "formula", "formulas", "math", "maths",
+                     "mathematics", "derivation", "proof", "integral", "theorem"],
+        "pos": ["a mathematical equation", "math formula with symbols", "handwritten math derivation"],
+        "neg": ["software code", "photo of a person"],
+        "penalty": 0.25,
+    },
+    "person": {
+        "keywords": ["person", "people", "speaker", "lecturer", "professor", "instructor",
+                     "teacher", "presenter", "face"],
+        "pos": ["a person speaking to the camera", "a lecturer standing in front of a class",
+                "face of a presenter"],
+        "neg": ["presentation slide with text", "computer screen with code"],
+        "penalty": 0.3,
+    },
+}
+_TOPIC_PATTERNS = {topic: _word_pattern(cfg["keywords"]) for topic, cfg in SEARCH_CONFIGS.items()}
+
+
+def match_topic(query):
+    """Return the first SEARCH_CONFIGS topic whose keywords appear as whole words, else None."""
+    q = _normalize(query)
+    for topic, pattern in _TOPIC_PATTERNS.items():
+        if pattern.search(q):
+            return topic
+    return None
+
+
+def get_search_config(query):
+    """Return {"pos", "neg", "penalty"} for the visual search of `query`.
+
+    Unmatched queries always use the raw query as the positive prompt (no penalty).
+    """
+    topic = match_topic(query)
+    if topic is None:
+        return {"pos": [query], "neg": [], "penalty": 0.0}
+    cfg = SEARCH_CONFIGS[topic]
+    return {"pos": list(cfg["pos"]), "neg": list(cfg["neg"]), "penalty": cfg["penalty"]}
+
 # --- 📜 TRANSCRIPT RETRIEVAL ---
 # Retrieval uses BM25 keyword scoring in pure Python rather than CLIP's text
 # encoder: CLIP truncates at 77 tokens (~1/3 of an 800-char chunk) and was
