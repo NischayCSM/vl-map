@@ -8,7 +8,8 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
-from logic import route_query, get_search_config, dedupe_scenes,parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp
+from logic import (route_query, get_search_config, dedupe_scenes, build_chat_messages,
+                   parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp)
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -381,7 +382,9 @@ else:
                         INSTRUCTION: Briefly confirm the scenes found.
                         """
                     
-                    res = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
+                    # Prior turns exclude the query just appended above; it is sent as `prompt` with its context.
+                    history = st.session_state.messages[:-1]
+                    res = ollama.chat(model='llama3', messages=build_chat_messages(history, prompt, max_history=6))
                     st.session_state.messages.append({"role": "assistant", "content": res['message']['content']})
                 except Exception as e: st.error(ollama_error_message(e))
             

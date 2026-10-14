@@ -227,3 +227,10 @@ def retrieve_chunks(query, chunks, top_n=5, k1=1.5, b=0.75):
 
 def format_chunks_for_prompt(chunks):
     return "\n".join(f"[{format_timestamp(c['start'])}] {c['text']}" for c in chunks)
+
+
+# --- 💬 CONVERSATION MEMORY ---
+def build_chat_messages(history, prompt, max_history=6):
+    """Return Ollama chat messages: the last `max_history` prior turns, then `prompt` as the user turn."""
+    prior = history[-max_history:] if max_history > 0 else []
+    return [{"role": m["role"], "content": m["content"]} for m in prior] + [{"role": "user", "content": prompt}]
