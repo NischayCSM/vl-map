@@ -188,6 +188,8 @@ def process_audio_transcription(video_path, model_size):
         return True
     except Exception as e:
         progress_bar.empty(); status_text.empty(); free_gpu_memory()
+        # A partial transcript would silently skew retrieval, so drop it entirely.
+        if os.path.exists(TRANSCRIPT_PATH): os.remove(TRANSCRIPT_PATH)
         report_ingest_error(f"Transcription failed ({type(e).__name__}: {e}). Visual search still works, but explanations have no transcript to draw on.")
         return False
 
