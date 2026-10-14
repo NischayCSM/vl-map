@@ -343,7 +343,7 @@ else:
 
                     unique_matches = dedupe_scenes(candidates, min_gap=10)
 
-                    visual_context = f"Matches at: {', '.join([str(int(m[0])) for m in unique_matches])}s"
+                    visual_context = "Matches at: " + (", ".join(f"[{format_timestamp(m[0])}]" for m in unique_matches) or "none")
                 else:
                     visual_context = "Concept Search."
                 
@@ -379,7 +379,7 @@ else:
                         You are a Search Assistant.
                         QUERY: {query}
                         VISUALS: {visual_context}
-                        INSTRUCTION: Briefly confirm the scenes found.
+                        INSTRUCTION: Briefly confirm the scenes found, citing their timestamps as given (e.g. [2:15]).
                         """
                     
                     # Prior turns exclude the query just appended above; it is sent as `prompt` with its context.
