@@ -1,6 +1,6 @@
 streamlit>=1.32
 ollama>=0.4
-transformers>=4.30
+transformers>=4.30,<6
 torch>=2.0
 opencv-python>=4.8
 pillow>=10.0

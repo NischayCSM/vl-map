@@ -8,7 +8,7 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
-from logic import (route_query, get_search_config, penalty_score, dedupe_scenes, build_chat_messages,
+from logic import (route_query, get_search_config, penalty_score, clip_embeddings, dedupe_scenes, build_chat_messages,
                    parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp)
 
 # --- CONFIGURATION ---
@@ -152,7 +152,7 @@ def process_video_ingestion(video_path):
             img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
             inputs = processor(images=img, return_tensors="pt").to(DEVICE)
             with torch.no_grad():
-                embed = model.get_image_features(**inputs)[0]
+                embed = clip_embeddings(model.get_image_features(**inputs))[0]
                 embed = embed / embed.norm(p=2, dim=-1, keepdim=True) 
                 
             frame_data["timestamps"].append(timestamp)
@@ -209,7 +209,7 @@ def load_index(vectors_mtime):
 def encode_text(model, proc, texts):
     inputs = proc(text=texts, return_tensors="pt", padding=True).to(DEVICE)
     with torch.no_grad():
-        embed = model.get_text_features(**inputs)
+        embed = clip_embeddings(model.get_text_features(**inputs))
     return embed / embed.norm(p=2, dim=-1, keepdim=True)
 
 @st.cache_data(max_entries=1)

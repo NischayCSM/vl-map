@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from logic import (  # noqa: E402
     build_chat_messages,
     chunk_segments,
+    clip_embeddings,
     dedupe_scenes,
     format_chunks_for_prompt,
     format_timestamp,
@@ -216,6 +217,22 @@ def test_format_timestamp_and_prompt():
     assert format_timestamp(135.9) == "2:15"
     assert format_timestamp(3725) == "62:05"
     assert format_chunks_for_prompt(CHUNKS[:2]).splitlines()[1].startswith("[1:00] Recursion")
+
+
+# --- CLIP output compatibility ---
+
+def test_clip_embeddings_handles_tensor_and_output_object():
+    class FakeTensor:  # transformers 4.x: the projected embedding itself
+        pass
+
+    class FakeOutput:  # transformers 5.x: BaseModelOutputWithPooling
+        def __init__(self, pooled):
+            self.last_hidden_state = object()
+            self.pooler_output = pooled
+
+    tensor = FakeTensor()
+    assert clip_embeddings(tensor) is tensor
+    assert clip_embeddings(FakeOutput(tensor)) is tensor
 
 
 # --- scene de-duplication ---

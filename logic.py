@@ -151,6 +151,16 @@ def penalty_score(best_pos, best_neg=None, query_sim=None, config=None):
     return score
 
 
+def clip_embeddings(output):
+    """Projected embeddings from CLIPModel.get_text_features/get_image_features.
+
+    transformers 4.x returns the projected embedding tensor directly; 5.x returns
+    a BaseModelOutputWithPooling whose pooler_output holds the projected embedding.
+    """
+    pooled = getattr(output, "pooler_output", None)
+    return output if pooled is None else pooled
+
+
 def dedupe_scenes(candidates, min_gap=10):
     """Sort (timestamp, score) matches by time and drop any within min_gap seconds of the last kept one."""
     unique = []
