@@ -56,6 +56,8 @@ cd vl-map
 ```bash
 pip install -r requirements.txt
 ```
+
+> **Note:** FFmpeg and Ollama are system installs, not Python packages, so `pip` will not install them. Install FFmpeg from https://ffmpeg.org (or your OS package manager) and Ollama from https://ollama.com. For CUDA builds of PyTorch, follow the selector at https://pytorch.org before running the command above.
 ### Setup Ollama
 
 Download and run Ollama, then pull the Llama 3 model:
