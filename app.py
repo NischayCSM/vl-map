@@ -95,7 +95,9 @@ def reset_system():
     if os.path.exists(TRANSCRIPT_PATH): os.remove(TRANSCRIPT_PATH)
     st.session_state.video_processed = False
     st.session_state.pop('last_matches', None)
-    st.session_state.messages = [] 
+    st.session_state.messages = []
+    st.session_state.video_time = 0
+    load_index.clear()
     free_gpu_memory()
 
 # --- 🎯 SEARCH CONFIG ---
@@ -121,9 +123,8 @@ def process_video_ingestion(video_path):
     progress_bar = st.progress(0)
     status_text.text(f"👀 1/2: Building Matrix on {DEVICE.upper()}...")
     
-    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True).to(DEVICE)
-    processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
-    
+    model, processor = load_clip()
+
     cap = cv2.VideoCapture(video_path)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -159,7 +160,7 @@ def process_video_ingestion(video_path):
         tensor_stack = torch.stack(frame_data["embeddings"])
         torch.save({"timestamps": frame_data["timestamps"], "matrix": tensor_stack}, VECTORS_PATH)
     
-    del model, processor; free_gpu_memory()
+    free_gpu_memory()
     progress_bar.empty(); status_text.text(f"✅ Visuals Ready.")
     return True
 
@@ -180,13 +181,17 @@ def process_audio_transcription(video_path, model_size):
     except: return False
 
 @st.cache_resource
-def load_resources():
-    if os.path.exists(VECTORS_PATH):
-        model = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True).to(DEVICE)
-        proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
-        data = torch.load(VECTORS_PATH)
-        return model, proc, data["matrix"].to(DEVICE), data["timestamps"]
-    return None, None, None, None
+def load_clip():
+    # The model never changes between videos, so it is loaded once per process.
+    model = CLIPModel.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True).to(DEVICE)
+    proc = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch16", use_safetensors=True)
+    return model, proc
+
+@st.cache_resource(max_entries=1)
+def load_index(vectors_mtime):
+    # Keyed on the file's mtime so a newly analyzed video is never served from a stale cache.
+    data = torch.load(VECTORS_PATH)
+    return data["matrix"].to(DEVICE), data["timestamps"]
 
 # --- UI SIDEBAR ---
 with st.sidebar:
@@ -228,7 +233,8 @@ st.title("👁️ Vision-Language Video Analyst")
 if not os.path.exists(UPLOAD_PATH) or not os.path.exists(VECTORS_PATH):
     st.info("👈 Upload a video in the sidebar to get started!")
 else:
-    search_model, search_proc, matrix, timestamps = load_resources()
+    search_model, search_proc = load_clip()
+    matrix, timestamps = load_index(os.path.getmtime(VECTORS_PATH))
     full_transcript = ""
     if os.path.exists(TRANSCRIPT_PATH):
         with open(TRANSCRIPT_PATH, "r", encoding="utf-8") as f: full_transcript = f.read()
