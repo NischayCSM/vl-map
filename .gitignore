@@ -3,3 +3,7 @@ video_data/*
 
 # ...EXCEPT the .gitkeep file (so the folder stays)
 !video_data/.gitkeep
+
+# Python / pytest caches
+__pycache__/
+.pytest_cache/
