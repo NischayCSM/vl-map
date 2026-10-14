@@ -12,8 +12,10 @@ from logic import (  # noqa: E402
     format_chunks_for_prompt,
     format_timestamp,
     get_search_config,
+    QUERY_WEIGHT,
     match_topic,
     parse_transcript,
+    penalty_score,
     retrieve_chunks,
     route_query,
 )
@@ -89,9 +91,36 @@ def test_get_search_config_for_topic():
     assert cfg["penalty"] == 0.4
 
 
+def test_get_search_config_topic_adds_raw_query_at_lower_weight():
+    cfg = get_search_config("code for sorting")
+    assert cfg["query"] == "code for sorting"
+    assert cfg["query"] not in cfg["pos"]  # kept out of the max-pooled topic prompts
+    assert 0 < cfg["query_weight"] < 1
+    assert cfg["query_weight"] == QUERY_WEIGHT == 0.5
+
+
 def test_get_search_config_unmatched_uses_raw_query():
     cfg = get_search_config("a cat on a sofa")
-    assert cfg == {"pos": ["a cat on a sofa"], "neg": [], "penalty": 0.0}
+    assert cfg == {"pos": ["a cat on a sofa"], "neg": [], "penalty": 0.0, "query": None, "query_weight": 0.0}
+
+
+def test_penalty_score_formula():
+    cfg = {"penalty": 0.4, "query_weight": 0.5}
+    assert penalty_score(0.30, 0.20, 0.10, cfg) == pytest.approx(0.30 + 0.5 * 0.10 - 0.4 * 0.20)
+    assert penalty_score(0.30, None, None, cfg) == pytest.approx(0.30)
+    assert penalty_score(0.30, 0.9, 0.9, {"penalty": 0.0, "query_weight": 0.0}) == pytest.approx(0.30)
+
+
+def test_penalty_score_query_breaks_ties_but_topic_dominates():
+    cfg = get_search_config("code for sorting")
+    # Two code-editor frames with equal topic scores: the one matching "sorting" wins.
+    sorting_editor = penalty_score(0.30, 0.10, 0.28, cfg)
+    other_editor = penalty_score(0.30, 0.10, 0.20, cfg)
+    assert sorting_editor > other_editor
+    # A slide that only mentions "code for sorting" scores well on the raw query but
+    # poorly on the topic prompts and hits the slide penalty, so it doesn't win.
+    slide_about_it = penalty_score(0.22, 0.30, 0.32, cfg)
+    assert other_editor > slide_about_it
 
 
 def test_get_search_config_returns_copies():

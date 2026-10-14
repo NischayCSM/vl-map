@@ -8,7 +8,7 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
-from logic import (route_query, get_search_config, dedupe_scenes, build_chat_messages,
+from logic import (route_query, get_search_config, penalty_score, dedupe_scenes, build_chat_messages,
                    parse_transcript, chunk_segments, retrieve_chunks, format_chunks_for_prompt, format_timestamp)
 
 # --- CONFIGURATION ---
@@ -206,6 +206,12 @@ def load_index(vectors_mtime):
     data = torch.load(VECTORS_PATH, weights_only=True)
     return data["matrix"].to(DEVICE), data["timestamps"]
 
+def encode_text(model, proc, texts):
+    inputs = proc(text=texts, return_tensors="pt", padding=True).to(DEVICE)
+    with torch.no_grad():
+        embed = model.get_text_features(**inputs)
+    return embed / embed.norm(p=2, dim=-1, keepdim=True)
+
 @st.cache_data(max_entries=1)
 def load_transcript_chunks(transcript_mtime):
     with open(TRANSCRIPT_PATH, "r", encoding="utf-8") as f:
@@ -315,28 +321,22 @@ else:
                 # --- VISUAL SEARCH ---
                 if mode == "VISUAL" or mode == "HYBRID":
                     config = get_search_config(query)
-                    
-                    inputs_pos = search_proc(text=config["pos"], return_tensors="pt", padding=True).to(DEVICE)
-                    with torch.no_grad():
-                        embed_pos = search_model.get_text_features(**inputs_pos)
-                        embed_pos /= embed_pos.norm(p=2, dim=-1, keepdim=True)
-                    
-                    embed_neg = None
-                    if config["neg"]:
-                        inputs_neg = search_proc(text=config["neg"], return_tensors="pt", padding=True).to(DEVICE)
-                        with torch.no_grad():
-                            embed_neg = search_model.get_text_features(**inputs_neg)
-                            embed_neg /= embed_neg.norm(p=2, dim=-1, keepdim=True)
 
-                    pos_scores = torch.matmul(matrix, embed_pos.T)
-                    best_pos, _ = torch.max(pos_scores, dim=1) 
-                    final_scores = best_pos
-                    
-                    if embed_neg is not None:
-                        neg_scores = torch.matmul(matrix, embed_neg.T)
-                        best_neg, _ = torch.max(neg_scores, dim=1)
-                        final_scores = best_pos - (config["penalty"] * best_neg)
-                    
+                    embed_pos = encode_text(search_model, search_proc, config["pos"])
+                    best_pos, _ = torch.max(torch.matmul(matrix, embed_pos.T), dim=1)
+
+                    best_neg = None
+                    if config["neg"]:
+                        embed_neg = encode_text(search_model, search_proc, config["neg"])
+                        best_neg, _ = torch.max(torch.matmul(matrix, embed_neg.T), dim=1)
+
+                    query_sim = None
+                    if config["query"]:
+                        embed_query = encode_text(search_model, search_proc, [config["query"]])
+                        query_sim = torch.matmul(matrix, embed_query.T)[:, 0]
+
+                    final_scores = penalty_score(best_pos, best_neg, query_sim, config)
+
                     k = min(top_k_slider, matrix.shape[0])
                     values, indices = torch.topk(final_scores, k)
                     candidates = []

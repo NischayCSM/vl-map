@@ -114,16 +114,41 @@ def match_topic(query):
     return None
 
 
-def get_search_config(query):
-    """Return {"pos", "neg", "penalty"} for the visual search of `query`.
+# Weight of the raw query's similarity when a topic matched. It is added to
+# (not max-pooled with) the topic score: CLIP similarities of the topic prompts
+# and the query are in the same range, so a 0.5x-weighted query would almost
+# never win a max. Adding it lets specifics ("code for sorting") break ties
+# between topic matches without letting slides that merely mention the topic win.
+QUERY_WEIGHT = 0.5
 
-    Unmatched queries always use the raw query as the positive prompt (no penalty).
+
+def get_search_config(query):
+    """Return {"pos", "neg", "penalty", "query", "query_weight"} for the visual search of `query`.
+
+    Unmatched queries use the raw query as the only positive prompt (no penalty,
+    no extra query term). Matched topics use the topic prompts plus the raw
+    query as a lower-weighted extra positive.
     """
     topic = match_topic(query)
     if topic is None:
-        return {"pos": [query], "neg": [], "penalty": 0.0}
+        return {"pos": [query], "neg": [], "penalty": 0.0, "query": None, "query_weight": 0.0}
     cfg = SEARCH_CONFIGS[topic]
-    return {"pos": list(cfg["pos"]), "neg": list(cfg["neg"]), "penalty": cfg["penalty"]}
+    return {"pos": list(cfg["pos"]), "neg": list(cfg["neg"]), "penalty": cfg["penalty"],
+            "query": query, "query_weight": QUERY_WEIGHT}
+
+
+def penalty_score(best_pos, best_neg=None, query_sim=None, config=None):
+    """Score = Max(Positive) + query_weight * Sim(query) - penalty * Max(Negative).
+
+    Works elementwise on floats or torch tensors.
+    """
+    config = config or {}
+    score = best_pos
+    if query_sim is not None and config.get("query_weight"):
+        score = score + config["query_weight"] * query_sim
+    if best_neg is not None and config.get("penalty"):
+        score = score - config["penalty"] * best_neg
+    return score
 
 
 def dedupe_scenes(candidates, min_gap=10):

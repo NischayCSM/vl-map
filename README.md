@@ -19,7 +19,7 @@ The system features a **Smart Router** that distinguishes between visual queries
     * Implements a custom linear algebra search engine using direct tensor operations (eliminating the need for a vector database).
     * Applies a dynamic penalty score equation:  
       $$Score = Max(Positive) - (Penalty \times Max(Negative))$$
-    * Positive/negative prompts and penalties come from a topic table (code, graph/plot, flowchart/diagram, whiteboard, table, equation/math, person/speaker). Queries that match no topic search for the raw query text with no penalty.
+    * Positive/negative prompts and penalties come from a topic table (code, graph/plot, flowchart/diagram, whiteboard, table, equation/math, person/speaker). When a topic matches, the raw query is also scored and added at half weight ($+ 0.5 \times Sim(Query)$), so specifics like "code for sorting" still count without favouring slides that merely mention the topic. Queries that match no topic search for the raw query text with no penalty.
 * **Intelligent RAG Explainer:**
     * Uses **Faster-Whisper** for high-accuracy speech-to-text transcription.
     * Splits the transcript into ~60-second / ~800-character chunks, each tagged with its start time.
