@@ -8,6 +8,7 @@ import numpy as np
 from faster_whisper import WhisperModel 
 import torch
 import gc
+from logic import route_query
 
 # --- CONFIGURATION ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -276,13 +277,7 @@ else:
         if submit_btn and query:
             st.session_state.messages.append({"role": "user", "content": query})
             
-            q_lower = query.lower()
-            visual_triggers = ["find", "show", "where", "look", "locate", "diagram", "slide", "code", "chart"]
-            explain_triggers = ["explain", "what", "why", "define", "summary", "summarize", "how"]
-            
-            if any(k in q_lower for k in visual_triggers): mode = "VISUAL"
-            elif any(k in q_lower for k in explain_triggers): mode = "EXPLAIN"
-            else: mode = "HYBRID" 
+            mode = route_query(query)
 
             with st.spinner(f"Thinking ({mode} Mode)..."):
                 unique_matches = []
@@ -337,6 +332,14 @@ else:
                         QUESTION: {query}
                         TRANSCRIPT: {full_transcript[:15000]}
                         INSTRUCTION: Be clear and concise.
+                        """
+                    elif mode == "HYBRID":
+                        prompt = f"""
+                        You are a Video Assistant. Answer using both the visual matches and the transcript.
+                        QUESTION: {query}
+                        VISUALS: {visual_context}
+                        TRANSCRIPT: {full_transcript[:15000]}
+                        INSTRUCTION: Be clear and concise, and mention the relevant scenes.
                         """
                     else:
                         prompt = f"""
